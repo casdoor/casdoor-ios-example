@@ -1,0 +1,14 @@
+{
+  "pins" : [
+    {
+      "identity" : "casdoor-ios-sdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/casdoor/casdoor-ios-sdk.git",
+      "state" : {
+        "revision" : "093fdfda0e7eccfa99e7010051b52651a7774cec",
+        "version" : "1.0.0"
+      }
+    }
+  ],
+  "version" : 2
+}
