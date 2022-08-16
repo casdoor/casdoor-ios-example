@@ -1,6 +1,5 @@
 # casdoor-ios-example
 
-
 ## Init example
 
 You need to init requires 5 parameters, which are all string type:
