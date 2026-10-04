@@ -19,8 +19,7 @@ import Casdoor
 class WebViewController: UIViewController {
     var targetURL: URL?
     let webView:WKWebView = .init()
-    var casdoor: Casdoor!
-    var tokenHandle: ((String) -> ())?
+    var tokenHandle: ((Result<AccessTokenResponse, Error>) -> ())?
     override func viewDidLoad() {
         super.viewDidLoad()
         self.webView.frame = self.view.bounds
@@ -29,7 +28,6 @@ class WebViewController: UIViewController {
         self.view.addSubview(self.webView)
         self.view.addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "|-0-[view]-0-|", options: [], metrics: nil, views: ["view":self.webView]))
         self.view.addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|-0-[view]-0-|", options: [], metrics: nil, views: ["view":self.webView]))
-        self.casdoor = Casdoor.init(config: config)
         self.targetURL = try? casdoor.getSigninUrl()
         loadAddressURL()
     }
@@ -49,11 +47,13 @@ extension WebViewController: WKNavigationDelegate {
         
         if let url = navigationAction.request.url , url.scheme == scheme {
             decisionHandler(.cancel)
-            let params = url.query?.parametersFromQueryString
-            if let code = params?["code"] {
-                Task {
-                   let result = try await casdoor.requestOauthAccessToken(code:code)
-                    self.tokenHandle?(result.accessToken)
+            let tokenHandle = self.tokenHandle
+            Task {
+                do {
+                    let token = try await casdoor.handleCallback(url: url)
+                    tokenHandle?(.success(token))
+                } catch {
+                    tokenHandle?(.failure(error))
                 }
             }
             self.navigationController?.popViewController(animated: true)

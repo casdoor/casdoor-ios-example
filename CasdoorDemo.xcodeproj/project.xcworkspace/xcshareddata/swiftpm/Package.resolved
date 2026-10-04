@@ -5,7 +5,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/casdoor/casdoor-ios-sdk.git",
       "state" : {
-        "revision" : "093fdfda0e7eccfa99e7010051b52651a7774cec",
+        "revision" : "c412edcad80963bc1297cde7b22f8f8d7a6724cb",
         "version" : "1.0.0"
       }
     }

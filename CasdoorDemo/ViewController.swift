@@ -15,7 +15,6 @@
 import UIKit
 import Casdoor
 import AuthenticationServices
-import SafariServices
 
 let config = CasdoorConfig.init(endpoint: "https://door.casdoor.com",
                                 clientID: "014ae4bd048734ca2dea",
@@ -25,57 +24,109 @@ let config = CasdoorConfig.init(endpoint: "https://door.casdoor.com",
 
 let scheme = config.redirectUri.components(separatedBy: "://")[0]
 
+// One instance for the whole sign-in: getSigninUrl() keeps the PKCE verifier that handleCallback(url:) needs
+let casdoor = Casdoor(config: config)
+
 class ViewController: UIViewController, ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         return UIApplication.shared.windows.first { $0.isKeyWindow } ?? ASPresentationAnchor()
     }
-    
-    var token: String = "" {
-        didSet {
-            presentAlert(title: "Jwt", message: token)
-        }
-    }
+
+    var token: AccessTokenResponse?
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Sign out", style: .plain, target: self, action: #selector(signOut))
     }
-    func presentAlert(title: String,message: String) {
+
+    func presentAlert(title: String, message: String) {
         let alert = UIAlertController.init(title: title, message: message, preferredStyle: .alert)
         let action = UIAlertAction.init(title: "ok", style: .default)
         alert.addAction(action)
         self.present(alert, animated: true)
     }
-    
+
+    func signedIn(_ token: AccessTokenResponse) async {
+        self.token = token
+        do {
+            let user = try await casdoor.getUserInfo(accessToken: token.accessToken)
+            presentAlert(title: "Signed in", message: """
+                user: \(user.name ?? user.sub)
+                email: \(user.email ?? "")
+                roles: \(user.roles.joined(separator: ", "))
+                permissions: \(user.permissions.joined(separator: ", "))
+
+                access token: \(token.accessToken)
+                """)
+        } catch {
+            presentAlert(title: "error", message: "\(error)")
+        }
+    }
+
     @IBAction func useWebView(_ sender: Any) {
         let webvc = WebViewController()
-        webvc.tokenHandle = { token in
-            self.token = token
+        webvc.tokenHandle = { result in
+            Task { @MainActor in
+                switch result {
+                case .success(let token):
+                    await self.signedIn(token)
+                case .failure(let error):
+                    self.presentAlert(title: "error", message: "\(error)")
+                }
+            }
         }
         self.navigationController?.pushViewController(webvc, animated: true)
-        
     }
-    
+
     @IBAction func useAsAuthSession(_ sender: Any) {
-        let casdoor = Casdoor.init(config: config)
-        guard let url = try? casdoor.getSigninUrl() else {
-            self.presentAlert(title: "url", message: CasdoorError.invalidURL.description)
+        let url: URL
+        do {
+            url = try casdoor.getSigninUrl()
+        } catch {
+            presentAlert(title: "url", message: "\(error)")
             return
         }
+        startWebAuthSession(url: url) { callbackUrl in
+            do {
+                let token = try await casdoor.handleCallback(url: callbackUrl)
+                await self.signedIn(token)
+            } catch {
+                self.presentAlert(title: "error", message: "\(error)")
+            }
+        }
+    }
+
+    // Opens Casdoor's logout URL in the same browser used for sign-in, so the Casdoor
+    // session cookie is cleared too and the next sign-in asks for the password again.
+    @objc func signOut() {
+        guard let idToken = token?.idToken else {
+            presentAlert(title: "Sign out", message: "Not signed in")
+            return
+        }
+        let url: URL
+        do {
+            url = try casdoor.getSignoutUrl(idToken: idToken)
+        } catch {
+            presentAlert(title: "url", message: "\(error)")
+            return
+        }
+        startWebAuthSession(url: url) { _ in
+            self.token = nil
+            self.presentAlert(title: "Sign out", message: "Signed out")
+        }
+    }
+
+    func startWebAuthSession(url: URL, onCallback: @escaping @MainActor (URL) async -> Void) {
         let webAuthSession = ASWebAuthenticationSession(
             url: url,
             callbackURLScheme: scheme) { uri, error in
-                if let error = error {
-                    let msg = error.localizedDescription.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
-                    let errorDomain = (error as NSError).domain
-                    let errorCode = (error as NSError).code
-                    self.presentAlert(title: "error", message: "msg:\(msg ?? ""),domain:\(errorDomain),code:\(errorCode)")
-                } else if let successURL = uri {
-                    let params = successURL.query?.parametersFromQueryString
-                    if let code = params?["code"] {
-                        Task {
-                           let result = try await casdoor.requestOauthAccessToken(code:code)
-                            self.token = result.accessToken
-                        }
+                Task { @MainActor in
+                    if let error = error {
+                        let errorDomain = (error as NSError).domain
+                        let errorCode = (error as NSError).code
+                        self.presentAlert(title: "error", message: "msg:\(error.localizedDescription),domain:\(errorDomain),code:\(errorCode)")
+                    } else if let uri = uri {
+                        await onCallback(uri)
                     }
                 }
             }
@@ -85,4 +136,3 @@ class ViewController: UIViewController, ASWebAuthenticationPresentationContextPr
         _ = webAuthSession.start()
     }
 }
-
