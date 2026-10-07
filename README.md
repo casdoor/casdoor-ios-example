@@ -1,6 +1,8 @@
-# casdoor-ios-example
+# Casdoor iOS Example
 
 [![Build](https://github.com/casdoor/casdoor-ios-example/actions/workflows/build.yml/badge.svg)](https://github.com/casdoor/casdoor-ios-example/actions/workflows/build.yml)
+[![License](https://img.shields.io/github/license/casdoor/casdoor-ios-example)](https://github.com/casdoor/casdoor-ios-example/blob/master/LICENSE)
+[![Discord](https://img.shields.io/discord/1022748306096537660?logo=discord&label=discord&color=5865F2)](https://discord.gg/5rPsrAzK7S)
 
 A SwiftUI app that shows how to sign in to [Casdoor](https://casdoor.ai) with [casdoor-ios-sdk](https://github.com/casdoor/casdoor-ios-sdk):
 
